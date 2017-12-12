@@ -241,16 +241,26 @@ class environment:
         #current_state = current_state - 1
         
         if(current_state == self.idle):
-            transition = ([current_state],          \
+            transition = ([current_state-1],          \
                           [0],                      \
                           [self.current_action])
         else:
-            transition = ([current_state],          \
+            transition = ([current_state-1],          \
+                          [self.queue_count()],     \
+                          [self.current_action])
+        
+        if(current_state == self.idle):
+            transition2 = ([self.state_str(current_state)],          \
+                          [0],                      \
+                          [self.current_action])
+        else:
+            transition2 = ([self.state_str(current_state)],          \
                           [self.queue_count()],     \
                           [self.current_action])
         
         if(self.is_state_action_allowed(transition)):
             self.state_action_transitions.append(transition)
+            self.human_history.append(transition2)
 
     def store_state_value_pair(self, current_state):
         # environment transition history
@@ -260,8 +270,8 @@ class environment:
         if(self.is_state_value_allowed(transition)):
             self.state_value_transitions.append(transition)
             # human readable transition
-            transition = ([self.state_str(current_state)],[sq_count])
-            self.human_history.append(transition)
+            #transition = ([self.state_str(current_state)],[sq_count])
+            #self.human_history.append(transition)
     
 #evaluate cost function
     def evaluate_cost(self, current_state):
@@ -273,10 +283,12 @@ class environment:
         if(self.valid_state_action):
             self.state_action_rewards.append(cost)
             self.valid_state_action = False
+            self.cost_init  = 0
         else:
             if(len(self.state_action_rewards) > 0):
                 index = len(self.state_action_rewards) - 1
                 self.state_action_rewards[index] = cost
+
 
     
         if(self.valid_state_value):
@@ -292,8 +304,8 @@ class environment:
     
 # cost function value details
     def cost(self, state, direction):
-        a = 0.0
-        delay_value = self.delay_cost(state, direction)
+        a = 0.5
+        delay_value = 0.3*self.delay_cost(state, direction)
         energy_value = self.power_cost(state)
         
         #self.average_delays_per_episode[self.current_episode -1 ][self.requests_processed-1] = delay_value
@@ -309,7 +321,9 @@ class environment:
 
     def delay_cost(self, state, direction):
         if(state == self.sleep  and self.under_N_poicy == True):     # Case 3 & 4
-            delay = (self.cost_final - self.cost_init)
+            #self.cost_final = self.service_provider.get_cycle()
+            delay = (self.service_queue.timer_value() - self.cost_init)
+            #delay = self.service_provider.get_transition_delay(direction)
             A = 34
         
         elif(state == self.active and self.service_queue.request_arrival_count() > 0):    # Case 6
@@ -318,18 +332,18 @@ class environment:
             self.requests_processed += 1
             A = 6
                 
-        elif(state == self.idle):               # Case 1 & 2
+        elif(state == self.idle and self.queue_count() > 0):               # Case 1 & 2
             timeout = self.service_provider.get_cycle()
             delay = timeout + self.service_provider.get_transition_delay(direction)
             A = 12
         
         else:                                                           # Case 5 & 7
-            delay = self.service_provider.get_transition_delay(direction)
+            delay = 0#self.service_provider.get_transition_delay(direction)
             A = 57
 
 #print "[A:",A,"]"," delay, final: ", delay, " , ", self.cost_final
 
-        return math.pow(delay, 1.5)+ self.process_time
+        return delay #math.pow(delay, 1.5)+ self.process_time
 
     def power_cost(self, state):
         if(state == self.sleep  and self.under_N_poicy == True):     # Case 3 & 4
@@ -385,7 +399,7 @@ class environment:
         self.evaluate_state_values()
         self.evaluate_state_action_values()
         
-        self.total_rewards = sum(self.rewards)
+        self.total_rewards = sum(self.state_action_rewards)
         self.total_rewards = float(str(round(self.total_rewards, 2)))
 
         self.average_runs[self.current_run][self.current_episode-1] = self.total_rewards
@@ -483,7 +497,7 @@ class environment:
     
     def is_Q_tau_updated(self, state, SP_State):
 
-        if(SP_State == self.idle):
+        if(SP_State+1 == self.idle):
             #print "is_Q_tau_updated ", state
             value = int(self.tau_state_action_values[state])
             if(value ==  self.defualt_reward):
@@ -493,7 +507,7 @@ class environment:
                 return True
     
     def is_Q_n_updated(self, state, SP_State):
-        if(SP_State == self.sleep):
+        if(SP_State+1 == self.sleep):
             value = int(self.n_state_action_values[state])
             if(value ==  self.defualt_reward):
                 return  False
@@ -510,11 +524,13 @@ class environment:
     def update_state_action_value(self, state, value, SP_State):
 
         target = float(str(round(value, 2)))
-        if(SP_State == self.idle):
+        if(SP_State+1 == self.idle):
             old_estimate = self.tau_state_action_values[state]
             self.tau_state_action_values[state] = old_estimate + self.alpha*(target - old_estimate)
+        #print "state", state
+        #self.wait_debug("???")
         
-        elif(SP_State == self.sleep):
+        elif(SP_State+1 == self.sleep):
             old_estimate = self.n_state_action_values[state]
             self.n_state_action_values[state] = old_estimate + self.alpha*(target - old_estimate)
     
@@ -596,22 +612,22 @@ class environment:
     def show_transition(self):
         print "\n" * 15
         n = 0
-        size = len(self.rewards)
+        size = len(self.state_action_rewards)
         
         print "state_value_transitions(self) {size}: ", size
+        #print "", self.state_action_transitions
         '''
         while(n < size-2):
-            print self.human_history[n], "{Rt:", self.rewards[n], "}",\
-            "->", self.human_history[n+1],"{Rt:", self.rewards[n+1], "}", "\n"
+            print self.human_history[n], "{Rt:", self.state_action_rewards[n], "}",\
+            "->", self.human_history[n+1],"{Rt:", self.state_action_rewards[n+1], "}", "\n"
             n += 2
 
         if(size % 2 != 0):
-            print self.human_history[n],"{Rt:", self.rewards[n], "}\n\n",
+            print self.human_history[n],"{Rt:", self.state_action_rewards[n], "}\n\n"
         '''
 
+    
 
-
-#                    "\n\n\nself.average_runs\n\n", str(self.average_runs),                         \
 
 
         report =    "tau_state_action_values\n\n", str(self.tau_state_action_values),                   \

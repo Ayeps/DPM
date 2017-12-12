@@ -10,16 +10,16 @@ class DPM:
         self.active  = 1
         self.idle    = 2
         self.sleep   = 3
-        self.taus = [1,2,3,4,5]#,7,10,12,14,16,20]
+        self.taus = [2,3,4,5,6,7,8,9,10,11, 1000]#,7,10,12,14,16,20]
         #self.Ns = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        self.Ns =  list(np.arange(1, environment.requests_per_episode+1))
+        self.Ns =  list(np.arange(0, min(5,environment.requests_per_episode+1))+1)
         print "N-Policy", self.Ns
         self.wait_debug("wait...")
-        self.tau = 0
+        self.tau = 2
         environment.setup(len(self.taus), len(self.Ns))
         self.action = 0
         self.epsilon = epsilon
-        self.N = 1#self.select_nPolicy(environment)
+        self.N = self.select_nPolicy(environment)
 
 
 
@@ -86,10 +86,10 @@ class DPM:
             
             duration = self.increment_duration(environment)
             environment.under_N_poicy = True
-            
+            environment.cost_init == 0
             # just about to enter sleep state -> select an N Policy
-            self.N = self.select_nPolicy(environment)
-            environment.current_action = self.Ns.index(self.N)
+            #self.N = self.select_nPolicy(environment)
+            #environment.current_action = self.Ns.index(self.N)
             environment.case_number = 2
             
             #if(environment.cost_init == 0):
@@ -100,15 +100,19 @@ class DPM:
             #print "[N-Policy, queue_count] " , "[",self.N, ",", environment.queue_count() ,"]"
                 
             duration = self.increment_duration(environment)
-            
+            cycle = self.increment_cycle(environment)
             if(environment.cost_init == 0):
                 environment.cost_init = environment.service_queue.timer_value()-1
-
+            
+            if(queue_count == 1):
+                self.N = self.select_nPolicy(environment)
+                    
+                    
             environment.cost_final = environment.service_queue.timer_value() + 1
             environment.under_N_poicy = True
             environment.case_number = 2
             # just about to enter sleep state -> select an N Policy
-            self.N = self.select_nPolicy(environment)
+            
             environment.current_action = self.Ns.index(self.N)
             environment.case_number = 2
 
@@ -144,7 +148,7 @@ class DPM:
         
             environment.cost_final = environment.service_queue.timer_value() + 1
             duration = self.increment_duration(environment)
-            cycle = self.increment_cycle(environment)
+            #cycle = self.increment_cycle(environment)
 
             environment.current_action = 100#self.random_active2idle()
             environment.transition_dir = "active2active"
@@ -182,14 +186,15 @@ class DPM:
         #greedy-Epsilon Policy
         if(policy_type == 1):
             q_values = environment.get_tau_q_values()
+
             column_0 = [row[0] for row in q_values]
+            
             max_action = max(column_0)
-                #if(max_action != 0):
-                #print "column_0", column_0
-                #print "max_action ", max_action
-                #self.wait_debug("just wait .. ")
             index = column_0.index(max_action)
+
+            
             action = self.taus[index]
+
         
         #Random Policy
         else:
@@ -210,7 +215,7 @@ class DPM:
         #greedy-Epsilon Policy
         if(policy_type == 1):
             q_values = environment.get_n_q_values()
-            column_0 = [row[sq_count] for row in q_values]
+            column_0 = [row[1] for row in q_values]
             max_action = max(column_0)
             index = column_0.index(max_action)
             action = self.Ns[index]

@@ -14,7 +14,7 @@ queue_size = 300
 requester_length = duration
 episodes = 100
 requests_per_episode = 100
-epsilon = 1
+epsilon = 0.98
 runs = 3
 
 environment = en.environment(requester_length, queue_size, requests_per_episode, episodes, runs)
